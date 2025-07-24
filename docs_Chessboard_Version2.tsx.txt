@@ -1,0 +1,51 @@
+import React from "react";
+import { Board, Piece, Move } from "./chess";
+
+interface ChessboardProps {
+  board: Board;
+  onSelect: (r: number, c: number) => void;
+  selected: [number, number] | null;
+  legal: Move[];
+  lastMove?: Move | null;
+}
+
+const PIECE_UNICODE: Record<Piece, string> = {
+  "K": "♔", "Q": "♕", "R": "♖", "B": "♗", "N": "♘", "P": "♙",
+  "k": "♚", "q": "♛", "r": "♜", "b": "♝", "n": "♞", "p": "♟",
+  "": "",
+};
+
+export function Chessboard({ board, onSelect, selected, legal, lastMove }: ChessboardProps) {
+  return (
+    <div className="chessboard" role="grid" aria-label="Chessboard">
+      {board.map((row, r) => (
+        <div className="board-row" key={r}>
+          {row.map((piece, c) => {
+            const isSelected = selected && selected[0] === r && selected[1] === c;
+            const isLegal = legal.some(m => m.to[0] === r && m.to[1] === c);
+            const isLast = lastMove &&
+              ((lastMove.from[0] === r && lastMove.from[1] === c) ||
+               (lastMove.to[0] === r && lastMove.to[1] === c));
+            return (
+              <div
+                className={
+                  "square" +
+                  ((r + c) % 2 === 0 ? " light" : " dark") +
+                  (isSelected ? " selected" : "") +
+                  (isLegal ? " legal" : "") +
+                  (isLast ? " lastmove" : "")
+                }
+                key={c}
+                onClick={() => onSelect(r, c)}
+                role="gridcell"
+                aria-label={piece ? PIECE_UNICODE[piece] : ""}
+              >
+                <span className="piece">{PIECE_UNICODE[piece]}</span>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}

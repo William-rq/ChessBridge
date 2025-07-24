@@ -1,0 +1,226 @@
+import React, { useState } from "react";
+import { createRoot } from "react-dom/client";
+import { initialBoard, legalMovesFor, makeMove, isWhite, isBlack, allLegalMoves, boardToFen, fenToBoard, Move, Board, Color } from "./chess";
+import { Chessboard } from "./Chessboard";
+import { alfredMove, AlfredLevel } from "./alfred";
+
+function opposite(color: Color): Color { return color === "w" ? "b" : "w"; }
+
+type AppPage = "welcome" | "game" | "about";
+
+function App() {
+  const [page, setPage] = useState<AppPage>("welcome");
+
+  // Game state
+  const [board, setBoard] = useState<Board>(initialBoard());
+  const [turn, setTurn] = useState<Color>("w");
+  const [selected, setSelected] = useState<[number, number] | null>(null);
+  const [legal, setLegal] = useState<Move[]>([]);
+  const [lastMove, setLastMove] = useState<Move | null>(null);
+  const [moveHistory, setMoveHistory] = useState<string[]>([]);
+  const [mode, setMode] = useState<"AI" | "Online">("AI");
+  const [level, setLevel] = useState<AlfredLevel>("Beginner");
+  const [side, setSide] = useState<Color>("w");
+  const [status, setStatus] = useState("Your move");
+  const [room, setRoom] = useState("");
+  const [roomInput, setRoomInput] = useState("");
+  const [isOnlineConnected, setOnlineConnected] = useState(false);
+
+  // --- Welcome page ---
+  if (page === "welcome") {
+    return (
+      <div className="welcome-container">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg" alt="Chess Logo" className="welcome-logo" />
+        <h1>ChessBridge</h1>
+        <h2>Welcome!</h2>
+        <p>
+          <strong>Play chess online with friends or face Alfred the AI.</strong><br />
+          Choose your opponent, side, and difficulty. <br />
+          <span style={{color:"#2b6cb0"}}>Fast • Modern • Free • No sign up</span>
+        </p>
+        <button onClick={() => setPage("game")}>Start Game</button>
+        <button onClick={() => setPage("about")}>About & Credits</button>
+        <footer>
+          <a href="https://github.com/William-rq/ChessBridge" target="_blank" rel="noopener" className="about-link">
+            <span aria-label="GitHub" role="img">🌐</span> GitHub Repo
+          </a>
+        </footer>
+      </div>
+    );
+  }
+
+  // --- About page ---
+  if (page === "about") {
+    return (
+      <div className="welcome-container">
+        <h1>About ChessBridge</h1>
+        <p>
+          ChessBridge is a modern, open-source chess platform for browser play.<br />
+          <ul style={{textAlign:"left",marginLeft:"20%"}}>
+            <li>✔️ Play against Alfred AI (3 strengths)</li>
+            <li>✔️ Play with a friend online (room code)</li>
+            <li>✔️ Move history, side choice, mobile support</li>
+          </ul>
+          <em>Made with React & TypeScript, designed for GitHub Pages.</em>
+        </p>
+        <p>
+          <strong>Credits:</strong><br />
+          Chess logic and UI by <a href="https://github.com/William-rq" target="_blank">William-rq</a>.<br />
+          SVG chess piece by <a href="https://commons.wikimedia.org/wiki/File:Chess_plt45.svg" target="_blank">Wikimedia</a>.<br />
+          Open source under the MIT License.
+        </p>
+        <button onClick={() => setPage("welcome")}>Back to Welcome</button>
+      </div>
+    );
+  }
+
+  // --- Game page ---
+  function resetGame() {
+    setBoard(initialBoard());
+    setTurn("w");
+    setSelected(null);
+    setLegal([]);
+    setLastMove(null);
+    setStatus("Your move");
+    setMoveHistory([]);
+  }
+
+  function handleSelect(r: number, c: number) {
+    if ((mode === "AI" && turn !== side) ||
+      (board[r][c] && ((side === "w" && !isWhite(board[r][c])) || (side === "b" && !isBlack(board[r][c]))))) {
+      setSelected([r, c]);
+      setLegal(legalMovesFor(board, r, c));
+    } else if (selected) {
+      const from = selected;
+      const to = [r, c] as [number, number];
+      const move: Move = { from, to };
+      if (legal.some(m => m.to[0] === r && m.to[1] === c)) {
+        const notation = moveToNotation(board, move);
+        const newBoard = makeMove(board, move);
+        setBoard(newBoard);
+        setTurn(opposite(turn));
+        setSelected(null);
+        setLegal([]);
+        setLastMove(move);
+        setMoveHistory([...moveHistory, notation]);
+        setStatus("Waiting for Alfred...");
+        setTimeout(() => alfredTurn(newBoard, opposite(turn), move), 400);
+      } else {
+        setSelected(null);
+        setLegal([]);
+      }
+    }
+  }
+
+  function alfredTurn(b: Board, c: Color, prevMove: Move) {
+    if ((mode === "AI" && c !== side)) {
+      const move = alfredMove(b, c, level);
+      if (!move) {
+        setStatus("Game over!");
+        return;
+      }
+      const notation = moveToNotation(b, move);
+      const newBoard = makeMove(b, move);
+      setBoard(newBoard);
+      setTurn(side);
+      setLastMove(move);
+      setMoveHistory([...moveHistory, notation]);
+      setStatus("Your move");
+    }
+  }
+
+  function handleModeChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    setMode(e.target.value as "AI" | "Online");
+    resetGame();
+  }
+  function handleLevelChange(e: React.ChangeEvent<HTMLSelectElement>) { setLevel(e.target.value as AlfredLevel); }
+  function handleSideChange(e: React.ChangeEvent<HTMLSelectElement>) { setSide(e.target.value as Color); resetGame(); }
+
+  // Online play (stub, can be expanded)
+  function handleRoomInput(e: React.ChangeEvent<HTMLInputElement>) { setRoomInput(e.target.value); }
+  function joinRoom() { setRoom(roomInput); setOnlineConnected(true); resetGame(); setStatus("Playing online!"); }
+  function leaveRoom() { setRoom(""); setOnlineConnected(false); resetGame(); setStatus("Left online game."); }
+
+  return (
+    <div className="game-container">
+      <h1>
+        <span role="img" aria-label="Chess">♟️</span> ChessBridge
+      </h1>
+      <div className="select-group">
+        <label>
+          Mode:
+          <select value={mode} onChange={handleModeChange}>
+            <option value="AI">Play Alfred</option>
+            <option value="Online">Online (room code)</option>
+          </select>
+        </label>
+        {mode === "AI" && (
+          <label>
+            Alfred Level:
+            <select value={level} onChange={handleLevelChange}>
+              <option value="Beginner">Beginner</option>
+              <option value="Intermediate">Intermediate</option>
+              <option value="Master">Master</option>
+            </select>
+          </label>
+        )}
+        <label>
+          Side:
+          <select value={side} onChange={handleSideChange}>
+            <option value="w">White</option>
+            <option value="b">Black</option>
+          </select>
+        </label>
+      </div>
+      {mode === "Online" && !isOnlineConnected && (
+        <div style={{ margin: "12px 0" }}>
+          <input
+            type="text"
+            placeholder="Enter room code"
+            value={roomInput}
+            onChange={handleRoomInput}
+            style={{ width: "130px", marginRight: "8px" }}
+          />
+          <button onClick={joinRoom} disabled={!roomInput.trim()}>Join / Create Room</button>
+        </div>
+      )}
+      {mode === "Online" && isOnlineConnected && (
+        <div style={{ margin: "12px 0" }}>
+          <span style={{ fontWeight: 500, color: "#2b6cb0" }}>Room: {room}</span>
+          <button onClick={leaveRoom} style={{ marginLeft: 10 }}>Leave Room</button>
+        </div>
+      )}
+      <div className="status">{status}</div>
+      <Chessboard board={board} onSelect={handleSelect} selected={selected} legal={legal} lastMove={lastMove} />
+      <div className="move-history">
+        <strong>Moves:</strong>
+        {moveHistory.length === 0 && <span> None</span>}
+        {moveHistory.map((m, i) => (
+          <span key={i}>{i % 2 === 0 ? ` ${Math.floor(i/2)+1}.` : ""} {m}</span>
+        ))}
+      </div>
+      <div style={{marginTop:"18px"}}>
+        <button onClick={resetGame}>Reset</button>
+        <button onClick={() => setPage("welcome")}>Return to Welcome</button>
+      </div>
+      <footer>
+        <a href="https://github.com/William-rq/ChessBridge" target="_blank" rel="noopener" className="about-link">
+          <span aria-label="GitHub" role="img">🌐</span> GitHub Repo
+        </a>
+      </footer>
+    </div>
+  );
+}
+
+// Simple move notation for move history
+function moveToNotation(board: Board, move: Move) {
+  const [fr, fc] = move.from;
+  const [tr, tc] = move.to;
+  const piecestr = board[fr][fc].toUpperCase() !== "P" ? board[fr][fc].toUpperCase() : "";
+  const capture = board[tr][tc] ? "x" : "";
+  const files = "abcdefgh";
+  return `${piecestr}${files[fc]}${8-fr}${capture}${files[tc]}${8-tr}`;
+}
+
+const root = createRoot(document.getElementById("root")!);
+root.render(<App />);
